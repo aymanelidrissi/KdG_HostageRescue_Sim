@@ -8,6 +8,7 @@ public class GameManager : MonoBehaviour
     public State state = State.Playing;
 
     public float elapsed;
+    public float bestTime = float.PositiveInfinity;
     public UnityEvent onWin;
     public UnityEvent onLose;
 
