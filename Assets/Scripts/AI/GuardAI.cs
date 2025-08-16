@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.XR.Interaction.Toolkit;
+using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 [RequireComponent(typeof(NavMeshAgent))]
 public class GuardAI : MonoBehaviour
@@ -14,14 +16,23 @@ public class GuardAI : MonoBehaviour
     [Range(1f, 180f)] public float viewAngle = 90f;
     public float loseAfterSeconds = 1.0f;
 
-    private NavMeshAgent agent;
-    private int patrolIndex = 0;
+    public string fleeTriggerTag = "KeyItem";
+    public bool requireHeldKey = true;
+    public float fleeDuration = 2f;
+    public float fleeDistance = 5f;
+    public float fleeSpeed = 3.5f;
 
-    private enum State { Patrol, Seek, Return }
-    private State state = State.Patrol;
+    NavMeshAgent agent;
+    int patrolIndex = 0;
 
-    private float repathTimer = 0f;
-    private float lostTimer = 0f;
+    enum State { Patrol, Seek, Return, Flee }
+    State state = State.Patrol;
+
+    float repathTimer = 0f;
+    float lostTimer = 0f;
+
+    float fleeUntil = 0f;
+    float originalSpeed = 0f;
 
     void Awake()
     {
@@ -41,9 +52,10 @@ public class GuardAI : MonoBehaviour
             case State.Patrol: PatrolUpdate(); break;
             case State.Seek: SeekUpdate(); break;
             case State.Return: ReturnUpdate(); break;
+            case State.Flee: FleeUpdate(); break;
         }
 
-        if (player != null)
+        if (player != null && state != State.Flee)
             TrySeePlayer();
     }
 
@@ -107,6 +119,15 @@ public class GuardAI : MonoBehaviour
         state = State.Patrol;
     }
 
+    void FleeUpdate()
+    {
+        if (Time.time >= fleeUntil)
+        {
+            if (agent) agent.speed = originalSpeed;
+            state = State.Return;
+        }
+    }
+
     void TrySeePlayer()
     {
         Vector3 toPlayer = player.position - transform.position;
@@ -139,5 +160,54 @@ public class GuardAI : MonoBehaviour
     void SetDestinationSafe(Vector3 worldPos)
     {
         agent.SetDestination(worldPos);
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        if (!other.CompareTag(fleeTriggerTag)) return;
+
+        if (requireHeldKey)
+        {
+            var grab = other.GetComponentInParent<XRGrabInteractable>();
+            if (grab == null || !grab.isSelected) return;
+        }
+
+        StartFlee(other.bounds.center);
+    }
+
+    void StartFlee(Vector3 threatPos)
+    {
+        if (agent == null) return;
+
+        originalSpeed = agent.speed;
+        agent.speed = fleeSpeed;
+
+        Vector3 origin = transform.position;
+        Vector3 dir = (origin - threatPos).normalized;
+        if (dir.sqrMagnitude < 0.001f) dir = transform.forward;
+
+        Vector3 fleePoint;
+        if (!FindFleePoint(origin, dir, fleeDistance, out fleePoint))
+            fleePoint = origin + dir * fleeDistance;
+
+        agent.ResetPath();
+        agent.SetDestination(fleePoint);
+
+        fleeUntil = Time.time + fleeDuration;
+        state = State.Flee;
+        lostTimer = 0f;
+    }
+
+    bool FindFleePoint(Vector3 origin, Vector3 dir, float distance, out Vector3 result)
+    {
+        for (int i = -3; i <= 3; i++)
+        {
+            Vector3 testDir = Quaternion.Euler(0f, i * 20f, 0f) * dir;
+            Vector3 target = origin + testDir * distance;
+            if (NavMesh.SamplePosition(target, out NavMeshHit hit, 2.5f, NavMesh.AllAreas))
+            { result = hit.position; return true; }
+        }
+        result = origin;
+        return false;
     }
 }
