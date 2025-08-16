@@ -9,6 +9,7 @@ public class GameManager : MonoBehaviour
 
     public float elapsed;
     public float bestTime = float.PositiveInfinity;
+
     public UnityEvent onWin;
     public UnityEvent onLose;
 
@@ -17,6 +18,7 @@ public class GameManager : MonoBehaviour
         if (I != null && I != this) { Destroy(gameObject); return; }
         I = this;
         DontDestroyOnLoad(gameObject);
+        bestTime = PlayerPrefs.GetFloat("bestTime", float.PositiveInfinity);
     }
 
     void Update()
@@ -28,6 +30,12 @@ public class GameManager : MonoBehaviour
     {
         if (state != State.Playing) return;
         state = State.Win;
+        if (elapsed < bestTime)
+        {
+            bestTime = elapsed;
+            PlayerPrefs.SetFloat("bestTime", bestTime);
+            PlayerPrefs.Save();
+        }
         onWin?.Invoke();
     }
 
@@ -42,5 +50,11 @@ public class GameManager : MonoBehaviour
     {
         state = State.Playing;
         elapsed = 0f;
+    }
+
+    public void ClearBestTime()
+    {
+        bestTime = float.PositiveInfinity;
+        PlayerPrefs.DeleteKey("bestTime");
     }
 }
